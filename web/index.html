@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PokéRAG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <h1>PokéRAG</h1>
+        <p>Ask about stats, regions and lore, build teams, and plan counters, grounded in <span id="count">every</span> Pokémon.</p>
+      </div>
+    </div>
+    <span id="llm-badge" class="badge">…</span>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="ask">Ask</button>
+    <button class="tab" data-tab="team">Team builder</button>
+    <button class="tab" data-tab="counter">Counter a team</button>
+  </nav>
+
+  <main>
+    <!-- Ask -->
+    <section id="tab-ask" class="panel active">
+      <div class="chat-layout">
+        <div class="chat">
+          <div id="messages" class="messages">
+            <div class="empty">
+              <h2>Try asking</h2>
+              <div class="chips" id="examples"></div>
+            </div>
+          </div>
+          <form id="ask-form" class="composer">
+            <input id="question" autocomplete="off" placeholder="e.g. How do I beat Garchomp, Dragonite and Tyranitar?">
+            <button type="submit" id="send">Ask</button>
+          </form>
+        </div>
+        <aside class="sources">
+          <h3>Sources</h3>
+          <div id="understood" class="understood"></div>
+          <div id="source-cards" class="source-cards"><p class="muted">Retrieved Pokémon and documents appear here.</p></div>
+          <details id="ctx-details" hidden>
+            <summary>View retrieved context</summary>
+            <pre id="ctx"></pre>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Team builder -->
+    <section id="tab-team" class="panel">
+      <div class="tool-head">
+        <div>
+          <h2>Team builder</h2>
+          <p class="muted">Add up to six Pokémon. Analyze shows shared weaknesses and coverage gaps; Auto-complete fills the empty slots.</p>
+        </div>
+        <div class="filters" data-for="team"></div>
+      </div>
+      <div class="slots" id="team-slots"></div>
+      <div class="actions">
+        <button id="team-analyze">Analyze team</button>
+        <button id="team-build" class="secondary">Auto-complete team</button>
+        <button id="team-clear" class="ghost">Clear</button>
+      </div>
+      <div id="team-out"></div>
+    </section>
+
+    <!-- Counters -->
+    <section id="tab-counter" class="panel">
+      <div class="tool-head">
+        <div>
+          <h2>Counter a team</h2>
+          <p class="muted">Enter the opposing Pokémon. Optionally add your own team to see which of your members to send in.</p>
+        </div>
+        <div class="filters" data-for="counter"></div>
+      </div>
+      <h4 class="label">Opponents</h4>
+      <div class="slots" id="opp-slots"></div>
+      <h4 class="label">Your team (optional)</h4>
+      <div class="slots" id="mine-slots"></div>
+      <div class="actions">
+        <button id="counter-go">Find counters</button>
+        <button id="counter-clear" class="ghost">Clear</button>
+      </div>
+      <div id="counter-out"></div>
+    </section>
+  </main>
+
+  <footer>Data from <a href="https://pokeapi.co" target="_blank" rel="noopener">PokéAPI</a>. Fan project, not affiliated with Nintendo, Game Freak or The Pokémon Company.</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>
