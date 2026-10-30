@@ -1,0 +1,44 @@
+{"question": "Which Pok\u00e9mon will die if the fire on the end of its tail is extinguished?", "expected": ["pokemon:charmander"]}
+{"question": "a huge glutton that raids village rice stores and eats 880 pounds of food a day", "expected": ["pokemon:snorlax"]}
+{"question": "which pokemon wears its dead mother's skull as a helmet?", "expected": ["pokemon:cubone"]}
+{"question": "ghost hiding under a rag costume made to look cute; people who peek under it die", "expected": ["pokemon:mimikyu-disguised"]}
+{"question": "steals people's shadows, and if your shadow starts laughing you need a charm", "expected": ["pokemon:gengar"]}
+{"question": "its tail oozes sweetness in water so it uses it as a fishing lure, and it doesn't feel pain if the tail is bitten", "expected": ["pokemon:slowpoke"]}
+{"question": "described as the weakest and most pathetic pokemon in the world", "expected": ["pokemon:magikarp"]}
+{"question": "gentle creature that carries people across the sea on its back while singing", "expected": ["pokemon:lapras"]}
+{"question": "rearranges its cells to become a copy of whatever opponent it sees", "expected": ["pokemon:ditto"]}
+{"question": "duck that suffers constant headaches which unleash psychic power", "expected": ["pokemon:psyduck"]}
+{"question": "balloon ghost said to carry children away to the afterlife", "expected": ["pokemon:drifloon"]}
+{"question": "spirit of a child lost in the woods that possessed a tree stump", "expected": ["pokemon:phantump"]}
+{"question": "carries a mask of the face it had back when it was human", "expected": ["pokemon:yamask"]}
+{"question": "eats gemstones and its eyes glitter like jewels in the dark", "expected": ["pokemon:sableye"]}
+{"question": "whale so enormous that watching it is a popular tourist activity", "expected": ["pokemon:wailord"]}
+{"question": "keeps berries inside its shell where they turn into juice", "expected": ["pokemon:shuckle"]}
+{"question": "frog that covers its body in bubbles to protect its skin", "expected": ["pokemon:froakie"]}
+{"question": "sings a lullaby that puts anyone listening to sleep", "expected": ["pokemon:jigglypuff"]}
+{"question": "created the spoons it holds with psychic power and remembers everything since birth", "expected": ["pokemon:alakazam"]}
+{"question": "believed to be the dragon from ancient texts that destroyed a village with white-hot beams", "expected": ["pokemon:gyarados"]}
+{"question": "known as the Sea Incarnate and rescues drowning people", "expected": ["pokemon:dragonite"]}
+{"question": "thrown-away plush doll possessed by resentment, looking for revenge on its owner", "expected": ["pokemon:banette"]}
+{"question": "made of 108 spirits bound to an odd keystone", "expected": ["pokemon:spiritomb"]}
+{"question": "ghostly chandelier; houses lit by it had constant funerals", "expected": ["pokemon:chandelure"]}
+{"question": "ancient clay giant with a seal on its chest, rumored to contain a perpetual motion machine", "expected": ["pokemon:golurk"]}
+{"question": "sand mound on the beach possessed by grudges, has a shovel on its head", "expected": ["pokemon:sandygast"]}
+{"question": "seaweed fused with a sunken ship's anchor that drains the life of Wailord", "expected": ["pokemon:dhelmise"]}
+{"question": "swings a 220 pound hammer and knocks rocks at flying birds", "expected": ["pokemon:tinkaton"]}
+{"question": "golden coffin that traps grave robbers inside its body", "expected": ["pokemon:cofagrigus"]}
+{"question": "candle whose flame burns brighter the more life it absorbs; leads lost children to the spirit world", "expected": ["pokemon:litwick"]}
+{"question": "ghost whose gas tongue lick makes victims shake until they die", "expected": ["pokemon:haunter"]}
+{"question": "shabby, ugly fish that nobody pays attention to but is very hardy", "expected": ["pokemon:feebas"]}
+{"question": "beaver-like pokemon that wanders into villages and gnaws on houses", "expected": ["pokemon:bidoof"]}
+{"question": "ball that gathers at power plants and explodes from the slightest shock", "expected": ["pokemon:electrode"]}
+{"question": "ability that prevents the pokemon from taking critical hits", "expected": ["ability:battle-armor", "ability:shell-armor"]}
+{"question": "ability that lowers the foe's attack stat when the pokemon enters battle", "expected": ["ability:intimidate"]}
+{"question": "ability that makes it immune to ground type moves", "expected": ["ability:levitate"]}
+{"question": "ability that raises same type attack bonus from 1.5x to 2x", "expected": ["ability:adaptability"]}
+{"question": "move that restores half of the user's max HP", "expected": ["move:recover", "move:roost", "move:soft-boiled", "move:slack-off", "move:milk-drink", "move:heal-order", "move:shore-up"]}
+{"question": "move that scatters pointed rocks around the opposing side to damage Pok\u00e9mon that switch in", "expected": ["move:stealth-rock"]}
+{"question": "attack that switches the user out after it hits", "expected": ["move:u-turn", "move:volt-switch", "move:flip-turn"]}
+{"question": "status move that paralyzes the target with a weak electric charge", "expected": ["move:thunder-wave"]}
+{"question": "region whose starters are Rowlet, Litten and Popplio", "expected": ["region:alola"]}
+{"question": "region introduced in generation 9", "expected": ["region:paldea"]}

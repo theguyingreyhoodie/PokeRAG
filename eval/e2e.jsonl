@@ -1,0 +1,15 @@
+{"question": "What is the fastest Kanto Pokémon?", "must_include": ["Electrode"]}
+{"question": "Who has the highest base stat total among non-legendary Pokémon?", "must_include": ["Slaking"]}
+{"question": "What type is Garchomp and what is it 4x weak to?", "must_include": ["Dragon", "Ground", "Ice"]}
+{"question": "Which Pokémon dies if the flame on its tail goes out?", "must_include": ["Charmander"]}
+{"question": "What does Intimidate do?", "must_include": ["Attack"]}
+{"question": "Who are the starter Pokémon of the Paldea region?", "must_include": ["Sprigatito", "Fuecoco", "Quaxly"]}
+{"question": "What does Eevee evolve into with a Water Stone?", "must_include": ["Vaporeon"]}
+{"question": "How do I counter Garchomp?", "must_include": ["Ice"]}
+{"question": "What type of attack is super effective against Gengar?", "must_include": ["Ground|Psychic|Ghost|Dark"]}
+{"question": "My team is Charizard, Gyarados and Pikachu. How do I beat Tyranitar?", "must_include": ["Fighting|Water|Gyarados"]}
+{"question": "Build me a team around Pikachu", "must_include": ["Pikachu"]}
+{"question": "What is Snorlax's base HP?", "must_include": ["160"]}
+{"question": "Which legendary Pokémon come from the Johto region?", "must_include": ["Lugia", "Ho-Oh|Ho-oh"]}
+{"question": "Is Ghost super effective against Normal types?", "must_include": ["no|not|immune|no effect"]}
+{"question": "What is the strongest Fire-type move?", "must_include": ["V-create|V-Create"]}
