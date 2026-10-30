@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/raw/
+data/chroma/
+data/dataset.json
+.pytest_cache/
