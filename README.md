@@ -17,6 +17,8 @@ It runs entirely on your own machine for free by default (a local LLM through Ol
 | *"Build me a Paldea team around Garchomp"* | Greedy team builder that patches shared weaknesses and coverage gaps, restricted to a region |
 | *"Garchomp vs Salamence"*, *"Is Dragapult faster than Garchomp?"* | Side-by-side stats with the leader in each, weaknesses, and a computed one-on-one matchup verdict |
 | *"Which Pokémon evolve with a Moon Stone?"*, *"What level does Gible evolve?"* | Exact lookup over structured evolution steps (level, item, held item, trade, friendship, time, location) |
+| *"Is Weavile or Mamoswine better against Garchomp?"* | Ranks just your candidates against the opponent |
+| *"Which Fire types learn Will-O-Wisp?"*, *"Pokémon with Intimidate in Paldea"*, *"Ground types under 50 kg"*, *"Water types with Speed over 100"* | Exact database filter combining type, region, move, ability, weight/height and stat thresholds |
 | *"Tell me about the Johto region"* | Region cards: games, regional Pokédexes, starters, legendaries, regional forms |
 
 The web UI also has a **Team builder** (weakness heatmap, findings, suggested additions) and a **Counter a team** tool that work without the LLM at all.
@@ -32,7 +34,7 @@ The web UI also has a **Team builder** (weakness heatmap, findings, suggested ad
 flowchart LR
     Q[Question] --> R[Router<br/>names, types, region,<br/>stat, intent]
     R -->|counter / team / compare| S[Strategy engine<br/>type chart + abilities<br/>+ stats]
-    R -->|ranking / evolution| D[Exact DB query]
+    R -->|ranking / filter / evolution| D[Exact DB query]
     R -->|lookup| H[Hybrid search<br/>BM25 + vectors → RRF<br/>→ cross-encoder rerank]
     S --> C[Context builder<br/>analysis + Pokémon cards]
     D --> C
@@ -41,7 +43,7 @@ flowchart LR
     L --> A[Answer with citations]
 ```
 
-**1. Query routing (`router.py`).** Fast rule-based parsing finds Pokémon names (including "Alolan Ninetales", "Mega Charizard X", "Wash Rotom", typos in the team builder), types, regions or generations, stat words ("fastest", "bulkiest"), evolution items ("Moon Stone", "King's Rock") and the intent (lookup, ranking, team, counter, compare or evolution). Rules are used instead of an extra LLM call so routing is instant, free and behaves the same with a 3B local model as with a large hosted one.
+**1. Query routing (`router.py`).** Fast rule-based parsing finds Pokémon names (including "Alolan Ninetales", "Mega Charizard X", "Wash Rotom", typos in the team builder), types, regions or generations, stat words ("fastest", "bulkiest"), evolution items ("Moon Stone", "King's Rock"), filter conditions ("learns Earthquake", "with Levitate", "under 50 kg", "Speed over 100") and the intent (lookup, ranking, filter, team, counter, compare or evolution). Rules are used instead of an extra LLM call so routing is instant, free and behaves the same with a 3B local model as with a large hosted one.
 
 **2. Don't let the LLM do math.** Team analysis and counters are computed in plain Python (`strategy.py`): the full 18-type chart, STAB, the strongest sensible move of each type a Pokémon can learn, speed and bulk, and abilities that grant immunities (Levitate, Flash Fire, Water Absorb, ...) when the Pokémon is guaranteed to have them. The LLM receives these results as an `ANALYSIS` block and explains them. Small models are bad at multiplying type matchups; this keeps recommendations correct and reproducible.
 
@@ -74,7 +76,7 @@ Takeaways:
 
 Caveats: both eval sets are small and hand-written, so treat these numbers as a sanity check rather than a benchmark. The end-to-end check looks for expected keywords in the answer; it doesn't grade full correctness.
 
-`pytest` runs 48 unit tests for the type chart, name matching, routing, strategy engine, comparisons and evolutions.
+`pytest` runs 64 unit tests for the type chart, name matching, routing, strategy engine, comparisons, evolutions and filters.
 
 ## Quick start
 

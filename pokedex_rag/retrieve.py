@@ -10,15 +10,13 @@ from . import strategy
 from .config import RERANK_MODEL, TOP_K
 from .index import chunks, search
 from .router import parse
-from .store import STAT_LABELS, get_pokedex, norm, pretty
+from .store import NAME_STOPLIST, STAT_LABELS, get_pokedex, mentioned_names, norm, pretty
 
 MAX_CONTEXT_CHARS = 14000
 STOPWORDS = set("""a an the is are was were be of to in on for with and or what which who whom how why when where
 does do did can could should would i me my it its this that these those pokemon pokémon type types best good
 about tell vs versus from into than then them they their there please give show list""".split())
 # Move/ability names that are also everyday words in questions.
-NAME_STOPLIST = {"counter", "struggle", "rest", "protect", "swift", "charge", "simple", "pressure", "stall",
-                 "unaware", "illusion", "run away", "pickup", "teleport", "endure", "growth", "harvest"}
 RRF_K = 60
 
 
@@ -121,15 +119,6 @@ class Context:
         return "\n".join(out)
 
 
-def mentioned_names(table, low):
-    hits = []
-    for key, item in table.items():
-        n = norm(item["display"])
-        if len(n) > 2 and n not in NAME_STOPLIST and f" {n} " in low:
-            hits.append(key)
-    return hits
-
-
 def fmt_team_analysis(dex, a):
     lines = ["Team: " + ", ".join(f"{p['display']} ({'/'.join(t.title() for t in p['types'])})" for p in a["team"])]
     if a["shared_weaknesses"]:
@@ -170,11 +159,13 @@ def fmt_counters(c):
             f"{r['display']}{' (safely beats ' + ', '.join(r['checks']) + ')' if r['checks'] else ''}"
             for r in c["team_wide"][:5]))
     if "my_team_plan" in c:
-        lines.append("Using the asker's own team:")
+        whose = "the asker's candidates" if c.get("candidates") else "the asker's team"
+        lines.append(f"Using {whose} (best first):" if c.get("candidates") else "Using the asker's own team:")
         for opp, rows in c["my_team_plan"].items():
-            lines.append(f"  vs {opp}: " + "; ".join(f"{r['pokemon']} ({r['reason']})" for r in rows))
+            lines.append(f"  vs {opp}: " + "; ".join(f"{r['pokemon']} (score {r['score']}: {r['reason']})" if c.get("candidates")
+                                                      else f"{r['pokemon']} ({r['reason']})" for r in rows))
         if c["no_safe_answer"]:
-            lines.append("  The asker's team has no safe super-effective answer to: " + ", ".join(c["no_safe_answer"]))
+            lines.append(f"  None of {whose} is a safe super-effective answer to: " + ", ".join(c["no_safe_answer"]))
     return "\n".join(lines)
 
 
@@ -197,6 +188,41 @@ def fmt_compare(c):
     return "\n".join(lines)
 
 
+FIELD_LABELS = {**STAT_LABELS, "bst": "BST", "bulk": "HP+Def+SpD", "weight_kg": "kg", "height_m": "m"}
+FILTER_LIMIT = 40
+
+
+def fmt_filter(dex, q, matches, sort):
+    conds = []
+    if q.types:
+        conds.append("/".join(t.title() for t in q.types[:2]) + " type")
+    if q.region:
+        conds.append(f"in the {q.region.title()} Pokédex")
+    if q.move:
+        conds.append(f"can learn {dex.moves[q.move]['display']} (in at least one game)")
+    if q.ability:
+        conds.append(f"can have the ability {dex.abilities[q.ability]['display']}")
+    for f, op, v in q.numeric:
+        conds.append(f"{FIELD_LABELS[f] if f in STAT_LABELS or f == 'bst' else f.split('_')[0].title()} {op} {v:g}"
+                     + (f" {FIELD_LABELS[f]}" if f in ("weight_kg", "height_m") else ""))
+    shown = {sort} | {f for f, _, _ in q.numeric}
+
+    def row(p):
+        bits = ["/".join(t.title() for t in p["types"])] + [f"{FIELD_LABELS[f]} {dex.value(p, f):g}" if f not in ("weight_kg", "height_m")
+                                                          else f"{dex.value(p, f):g} {FIELD_LABELS[f]}" for f in sorted(shown)]
+        if q.ability:
+            hidden = next(a["hidden"] for a in p["abilities"] if a["name"] == q.ability)
+            bits.append("hidden ability" if hidden else "regular ability")
+        return f"- {p['display']} ({', '.join(bits)})"
+
+    order = f"sorted by {FIELD_LABELS.get(sort, sort)}, {'highest' if q.descending else 'lowest'} first"
+    text = f"{len(matches)} Pokémon match: {'; '.join(conds)} ({order}).\n"
+    text += "\n".join(row(p) for p in matches[:FILTER_LIMIT]) or "(no matches)"
+    if len(matches) > FILTER_LIMIT:
+        text += f"\n...and {len(matches) - FILTER_LIMIT} more."
+    return text
+
+
 def fmt_evo_steps(steps):
     return "\n".join(f"- {e['from_display']} → {e['to_display']}: " + " OR ".join(m["text"] for m in e["methods"])
                      for e in steps)
@@ -210,10 +236,14 @@ def build_context(question, history_pokemon=None, k=TOP_K):
     filters = {"region": q.region, "allow_legendary": q.allow_legendary, "allow_mega": q.allow_mega}
 
     if q.intent == "counter":
-        c = strategy.counters(dex, q.opponents, my_team=q.my_team or None, **filters)
+        if q.candidates:
+            c = strategy.counters(dex, q.opponents, my_team=q.candidates, plan_size=len(q.candidates), **filters)
+            c["candidates"] = q.candidates
+        else:
+            c = strategy.counters(dex, q.opponents, my_team=q.my_team or None, **filters)
         ctx.analysis, ctx.analysis_kind = c, "counters"
         ctx.blocks.append(("ANALYSIS (computed by the type-chart engine)", fmt_counters(c)))
-        for n in q.opponents + q.my_team:
+        for n in q.opponents + q.my_team + q.candidates:
             ctx.add_pokemon(n)
         for rows in c["per_opponent"].values():
             ctx.add_pokemon(rows[0]["name"])
@@ -278,6 +308,16 @@ def build_context(question, history_pokemon=None, k=TOP_K):
                              + f". Full line: {p['evolution']}")
             ctx.blocks.append(("EVOLUTIONS (exact, from the database)", "\n".join(parts)))
 
+    elif q.intent == "filter":
+        legend_no = re.search(r"\b(no|non|without|exclude|excluding|not) ?legend", low)
+        matches = dex.filter_pokemon(move=q.move, ability=q.ability, numeric=q.numeric, region=q.region,
+                                     types=q.types[:2] or None, allow_legendary=not legend_no, allow_mega=q.allow_mega)
+        sort = q.stat or "bst"
+        matches.sort(key=lambda p: dex.value(p, sort), reverse=q.descending)
+        ctx.blocks.append(("FILTER RESULTS (exact, from the database)", fmt_filter(dex, q, matches, sort)))
+        for p in matches[:4]:
+            ctx.add_pokemon(p["name"])
+
     elif q.intent == "ranking":
         if q.about_moves:
             moves = dex.rank_moves(q.types[0] if q.types else None)
@@ -299,6 +339,11 @@ def build_context(question, history_pokemon=None, k=TOP_K):
 
     for n in q.pokemon[:6]:
         ctx.add_pokemon(n)
+    if q.intent == "lookup" and q.move and q.pokemon:
+        mv = dex.moves[q.move]["display"]
+        ctx.blocks.append(("LEARNSET CHECK (exact, from the database)", "\n".join(
+            f"{dex.pokemon[n]['display']} {'CAN' if q.move in dex.pokemon[n]['moves'] else 'CANNOT'} learn {mv} "
+            f"(learnsets are merged across all games)." for n in q.pokemon[:6])))
 
     for t in q.types[:2]:
         ctx.blocks.append((f"{t.title()} type", dex.type_card(t)))
@@ -345,5 +390,6 @@ def explain(ctx):
     """Debug view of how a query was understood."""
     q = ctx.query
     return {"intent": q.intent, "pokemon": q.pokemon, "my_team": q.my_team, "opponents": q.opponents,
+            "candidates": q.candidates, "move": q.move, "ability": q.ability, "numeric": q.numeric,
             "types": q.types, "region": q.region, "stat": q.stat, "descending": q.descending,
             "allow_legendary": q.allow_legendary, "sources": [pretty(n) for n in ctx.pokemon] + ctx.other_sources}

@@ -201,7 +201,7 @@ def build_team(dex, core, size=6, **pool_filters):
     return {"team": team, "added": added, "analysis": analyze_team(dex, team)}
 
 
-def counters(dex, opponents, my_team=None, n=5, **pool_filters):
+def counters(dex, opponents, my_team=None, n=5, plan_size=2, **pool_filters):
     """Best answers to each opposing Pokémon, plus Pokémon that handle the whole team."""
     opps = [dex.pokemon[x] for x in opponents]
     pool_filters.setdefault("fully_evolved", True)
@@ -260,7 +260,7 @@ def counters(dex, opponents, my_team=None, n=5, **pool_filters):
         plan, uncovered = {}, []
         for o in opps:
             rows = sorted(((p, matchup(dex, p, o)) for p in mine), key=lambda r: r[1]["score"], reverse=True)
-            plan[o["display"]] = [{"pokemon": p["display"], **m} for p, m in rows[:2]]
+            plan[o["display"]] = [{"pokemon": p["display"], **m} for p, m in rows[:plan_size]]
             if not any(m["hits_se"] and m["safe"] for _, m in rows):
                 uncovered.append(o["display"])
         result["my_team_plan"] = plan

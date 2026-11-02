@@ -7,7 +7,7 @@ with a 3B local model as with a large hosted one.
 import re
 from dataclasses import dataclass, field
 
-from .store import REGIONS, norm
+from .store import REGIONS, mentioned_names, norm
 from .typechart import TYPES
 
 GEN_WORDS = {"i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8, "ix": 9}
@@ -35,6 +35,28 @@ COMPARE_WEAK = re.compile(r"\b(better|stronger|faster|slower|bulkier|tankier|who
 EVOLVE = re.compile(r"\b(evolv\w*|evolution\w*|evo)\b")
 TRADE = re.compile(r"\btrad(e|ed|es|ing)\b")
 FRIENDSHIP = re.compile(r"\b(friendship|happiness|happy|affection)\b")
+# A counter keyword right before a name: "counter to Garchomp", "better against Garchomp".
+COUNTER_TAIL = re.compile(COUNTER.pattern + r"(?: to| for)?$")
+
+# Filters: "which Pokémon learn X", "with Intimidate", "under 50 kg", "Speed over 100".
+LEARN = re.compile(r"\b(learn|learns|learning|learned|learnt|know|knows|get|gets|use|uses|has|have|with)\b")
+HAS = re.compile(r"\b(with|has|have|having|get|gets|got)\b")
+LT = {"under": "<", "below": "<", "less than": "<", "lighter than": "<", "shorter than": "<", "at most": "<="}
+GT = {"over": ">", "above": ">", "more than": ">", "greater than": ">", "heavier than": ">", "taller than": ">",
+      "at least": ">="}
+CMP = "|".join(map(re.escape, sorted({**LT, **GT}, key=len, reverse=True)))
+UNITS = {"kg": ("weight_kg", 1), "kgs": ("weight_kg", 1), "kilos": ("weight_kg", 1), "kilograms": ("weight_kg", 1),
+         "lb": ("weight_kg", 0.45359237), "lbs": ("weight_kg", 0.45359237), "pounds": ("weight_kg", 0.45359237),
+         "m": ("height_m", 1), "meters": ("height_m", 1), "metres": ("height_m", 1),
+         "ft": ("height_m", 0.3048), "feet": ("height_m", 0.3048), "foot": ("height_m", 0.3048)}
+SIZE = re.compile(rf"\b({CMP})\s+(\d+(?:\.\d+)?)\s*({'|'.join(sorted(UNITS, key=len, reverse=True))})\b")
+STAT_WORDS = {"special attack": "spa", "sp atk": "spa", "spatk": "spa", "spa": "spa",
+              "special defense": "spd", "special defence": "spd", "sp def": "spd", "spdef": "spd",
+              "base stat total": "bst", "bst": "bst", "hp": "hp", "attack": "atk", "atk": "atk",
+              "defense": "def", "defence": "def", "def": "def", "speed": "spe", "spe": "spe"}
+STAT_ALT = "|".join(map(re.escape, sorted(STAT_WORDS, key=len, reverse=True)))
+THRESHOLD = re.compile(rf"\b({STAT_ALT})\s+(?:stat\s+)?(?:of\s+)?({CMP})\s+(\d+)\b")
+THRESHOLD_PRE = re.compile(rf"\b({CMP})\s+(\d+)\s+(?:base\s+)?({STAT_ALT})\b")
 
 
 @dataclass
@@ -45,15 +67,71 @@ class Query:
     region: str | None = None
     stat: str | None = None
     descending: bool = True
-    intent: str = "lookup"                           # lookup | ranking | team | counter | compare | evolution
+    intent: str = "lookup"                           # lookup | ranking | team | counter | compare | evolution | filter
     my_team: list = field(default_factory=list)
     opponents: list = field(default_factory=list)
+    candidates: list = field(default_factory=list)   # "is Weavile or Mamoswine better vs Garchomp?"
+    move: str | None = None                          # filter: Pokémon that can learn this move
+    ability: str | None = None                       # filter: Pokémon that can have this ability
+    numeric: list = field(default_factory=list)      # filter: (field, op, value), e.g. ("weight_kg", "<", 50)
     allow_legendary: bool = False
     allow_mega: bool = False
     about_moves: bool = False
     evo_item: str | None = None                      # evolution filters: "moon-stone", trade, friendship
     evo_trade: bool = False
     evo_friendship: bool = False
+
+
+def or_candidates(dex, text):
+    """Split "Is Weavile or Mamoswine better against Garchomp?" into (candidates, opponents).
+
+    Candidates are a run of names joined by "or". Returns None when the question doesn't
+    have that shape (e.g. "How do I counter Garchomp or Salamence?" names only opponents).
+    """
+    tokens = norm(text).split()
+    spans = dex.find_spans(text)
+    groups = []
+    for span in spans:
+        if groups and set(tokens[groups[-1][-1][2]:span[1]]) <= {"or", "and"}:
+            groups[-1].append(span)
+        else:
+            groups.append([span])
+    all_names = list(dict.fromkeys(n for n, _, _ in spans))
+    for g in groups:
+        joins = [t for a, b in zip(g, g[1:]) for t in tokens[a[2]:b[1]]]
+        if "or" not in joins:
+            continue
+        names = list(dict.fromkeys(n for n, _, _ in g))
+        rest = [n for n in all_names if n not in names]
+        after_kw = COUNTER_TAIL.search(" " + " ".join(tokens[max(0, g[0][1] - 3):g[0][1]]))
+        if rest and not after_kw:
+            return names, rest
+        if not rest and after_kw and len(names) >= 3:
+            # "a better counter to Garchomp, Weavile or Mamoswine": the first name is the opponent.
+            return names[1:], names[:1]
+    return None
+
+
+def parse_filters(dex, q, text, low):
+    """Move/ability/size/stat conditions for "which Pokémon ..." questions."""
+    if LEARN.search(low):
+        q.move = next(iter(mentioned_names(dex.moves, low)), None)
+    if HAS.search(low):
+        q.ability = next((a for a in mentioned_names(dex.abilities, low)
+                          if not q.move or dex.abilities[a]["display"] != dex.moves[q.move]["display"]), None)
+    raw = text.lower().replace("sp. ", "sp ")
+    for op, num, unit in SIZE.findall(raw):
+        fld, scale = UNITS[unit]
+        q.numeric.append((fld, LT.get(op) or GT[op], round(float(num) * scale, 2)))
+    for stat, op, num in THRESHOLD.findall(raw):
+        q.numeric.append((STAT_WORDS[stat], LT.get(op) or GT[op], int(num)))
+    for op, num, stat in THRESHOLD_PRE.findall(raw):
+        q.numeric.append((STAT_WORDS[stat], LT.get(op) or GT[op], int(num)))
+    if q.move or q.ability:
+        # "Fire Blast" names a move; it doesn't mean "Fire types".
+        named = " ".join(norm(t["display"]) for t in [q.move and dex.moves[q.move], q.ability and dex.abilities[q.ability]] if t)
+        q.types = [t for t in q.types if t not in named.split() or len(re.findall(rf"\b{t}\b", low)) > 1]
+    return bool(q.move or q.ability or q.numeric)
 
 
 def parse(dex, text, history_pokemon=None):
@@ -80,6 +158,7 @@ def parse(dex, text, history_pokemon=None):
 
     is_counter = bool(COUNTER.search(low))
     is_team = bool(TEAM.search(low))
+    has_filters = parse_filters(dex, q, text, low)
     is_compare = 2 <= len(q.pokemon) <= 4 and not MY_TEAM.search(low) and not is_team and (
         COMPARE.search(low) or (COMPARE_WEAK.search(low) and not is_counter))
     if is_compare:
@@ -93,12 +172,13 @@ def parse(dex, text, history_pokemon=None):
             q.intent = "lookup"   # a general evolution question: let search handle it
     elif is_counter and q.pokemon:
         q.intent = "counter"
-        my = MY_TEAM.search(low)
-        kw = COUNTER.search(low)
         cut = len(low[:COUNTER.search(low).start()].split())
         before = list(dict.fromkeys(n for n, pos in found if pos < cut))
         after = [n for n in dict.fromkeys(n for n, pos in found if pos >= cut) if n not in before]
-        if MY_TEAM.search(low) and before and after:
+        split = None if MY_TEAM.search(low) else or_candidates(dex, text)
+        if split:
+            q.candidates, q.opponents = split
+        elif MY_TEAM.search(low) and before and after:
             # "My team is A, B, C. How do I beat X?": names before the counter keyword are mine.
             q.my_team, q.opponents = before, after
         elif MY_TEAM.search(low) and is_team and not before:
@@ -109,6 +189,16 @@ def parse(dex, text, history_pokemon=None):
     elif is_team:
         q.intent = "team"
         q.my_team = q.pokemon
+    elif has_filters and not q.pokemon:
+        q.intent = "filter"
+        sup = re.sub(r"\bat (least|most)\b", " ", low)
+        if SUPERLATIVE.search(sup):
+            # "fastest Pokémon that learn Trick Room": sort the matches by that stat.
+            q.stat = next((stat for phrase, stat in STAT_PHRASES if re.search(rf"\b{phrase}\b", sup)), None)
+            q.descending = not ASCENDING.search(sup)
+        else:
+            # "Speed over 100" lists by Speed; otherwise by base stat total.
+            q.stat = next((f for f, _, _ in q.numeric if f not in ("weight_kg", "height_m")), None)
     elif SUPERLATIVE.search(low) and not q.pokemon:
         q.intent = "ranking"
         for phrase, stat in STAT_PHRASES:

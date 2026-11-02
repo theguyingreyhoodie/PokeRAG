@@ -2,6 +2,7 @@
 
 import difflib
 import json
+import operator
 import re
 import unicodedata
 from functools import lru_cache
@@ -12,6 +13,10 @@ from .typechart import TYPES, TypeChart
 STAT_LABELS = {"hp": "HP", "atk": "Atk", "def": "Def", "spa": "SpA", "spd": "SpD", "spe": "Spe"}
 REGIONS = ["kanto", "johto", "hoenn", "sinnoh", "unova", "kalos", "alola", "galar", "hisui", "paldea"]
 FORM_ADJ = {"alola": "alolan", "galar": "galarian", "hisui": "hisuian", "paldea": "paldean"}
+OPS = {"<": operator.lt, "<=": operator.le, ">": operator.gt, ">=": operator.ge}
+# Move/ability names that are also everyday words; never treated as a mention.
+NAME_STOPLIST = {"counter", "struggle", "rest", "protect", "swift", "charge", "simple", "pressure", "stall",
+                 "unaware", "illusion", "run away", "pickup", "teleport", "endure", "growth", "harvest"}
 
 
 def norm(text):
@@ -25,6 +30,16 @@ def norm(text):
 
 def pretty(name):
     return name.replace("-", " ").title()
+
+
+def mentioned_names(table, low):
+    """Keys of moves/abilities whose display name appears in normalized text `low` (padded with spaces)."""
+    hits = []
+    for key, item in table.items():
+        n = norm(item["display"])
+        if len(n) > 2 and n not in NAME_STOPLIST and f" {n} " in low:
+            hits.append(key)
+    return hits
 
 
 class Pokedex:
@@ -75,20 +90,24 @@ class Pokedex:
                 return p
         return None
 
-    def find_in_text(self, text):
-        """All Pokémon mentioned in free text, in order, as (name, token_position). Longest match wins."""
+    def find_spans(self, text):
+        """All Pokémon mentioned in free text, in order, as (name, start_token, end_token). Longest match wins."""
         tokens = norm(text).split()
         found, i = [], 0
         while i < len(tokens):
             for n in range(min(self.max_alias_len, len(tokens) - i), 0, -1):
                 key = " ".join(tokens[i:i + n])
                 if key in self.alias and (n > 1 or key not in COMMON_WORDS):
-                    found.append((self.alias[key], i))
+                    found.append((self.alias[key], i, i + n))
                     i += n
                     break
             else:
                 i += 1
         return found
+
+    def find_in_text(self, text):
+        """All Pokémon mentioned in free text, in order, as (name, token_position)."""
+        return [(name, start) for name, start, _ in self.find_spans(text)]
 
     def resolve(self, text):
         """Best-effort single-name lookup with typo tolerance (for team-builder inputs)."""
@@ -125,19 +144,33 @@ class Pokedex:
             out.append(p)
         return out
 
+    @staticmethod
+    def value(p, field):
+        """A numeric field: 'bst', 'bulk' (HP+Def+SpD), 'weight_kg', 'height_m', or a stat key ('hp', 'atk', ...)."""
+        if field in ("bst", "weight_kg", "height_m"):
+            return p[field]
+        if field == "bulk":
+            return p["stats"]["hp"] + p["stats"]["def"] + p["stats"]["spd"]
+        return p["stats"][field]
+
     def rank(self, stat, n=10, descending=True, **filters):
         """Top Pokémon by a stat ('bst', 'hp', 'atk', ..., or 'bulk' = HP+Def+SpD)."""
-        def value(p):
-            if stat == "bst":
-                return p["bst"]
-            if stat == "bulk":
-                return p["stats"]["hp"] + p["stats"]["def"] + p["stats"]["spd"]
-            return p["stats"][stat]
-
         filters.setdefault("allow_legendary", True)
         filters.setdefault("allow_mega", False)
-        ranked = sorted(self.pool(**filters), key=value, reverse=descending)
-        return [(p, value(p)) for p in ranked[:n]]
+        ranked = sorted(self.pool(**filters), key=lambda p: self.value(p, stat), reverse=descending)
+        return [(p, self.value(p, stat)) for p in ranked[:n]]
+
+    def filter_pokemon(self, move=None, ability=None, numeric=(), **pool_filters):
+        """Pokémon matching every condition. `numeric` holds (field, op, value) like ("weight_kg", "<", 50)."""
+        out = []
+        for p in self.pool(**pool_filters):
+            if move and move not in p["moves"]:
+                continue
+            if ability and not any(a["name"] == ability for a in p["abilities"]):
+                continue
+            if all(OPS[op](self.value(p, f), v) for f, op, v in numeric):
+                out.append(p)
+        return out
 
     def rank_moves(self, type_=None, n=10, damage_class=None):
         moves = [m for m in self.moves.values() if m["power"] and (not type_ or m["type"] == type_)

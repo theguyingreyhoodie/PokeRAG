@@ -179,3 +179,68 @@ def test_evolution_steps_in_and_out(dex):
 def test_evolution_follow_up_uses_history(dex):
     q = parse(dex, "what does it evolve into?", history_pokemon=["eevee"])
     assert q.intent == "evolution" and q.pokemon == ["eevee"]
+
+
+# ---------- "X or Y" candidates in counter questions ----------
+
+@pytest.mark.parametrize("text", ["Which is a better counter to Garchomp, Weavile or Mamoswine?",
+                                  "Is Weavile or Mamoswine better against Garchomp?"])
+def test_or_candidates_vs_opponent(dex, text):
+    q = parse(dex, text)
+    assert q.intent == "counter"
+    assert q.opponents == ["garchomp"] and q.candidates == ["weavile", "mamoswine"]
+
+
+def test_or_between_opponents_stays_opponents(dex):
+    q = parse(dex, "How do I counter Garchomp or Salamence?")
+    assert q.opponents == ["garchomp", "salamence"] and not q.candidates
+
+
+def test_candidates_are_ranked_against_opponent(dex):
+    c = strategy.counters(dex, ["garchomp"], my_team=["weavile", "mamoswine"], plan_size=2)
+    assert [r["pokemon"] for r in c["my_team_plan"]["Garchomp"]] == ["Mamoswine", "Weavile"]
+
+
+# ---------- filters ----------
+
+def test_route_filter_move_and_type(dex):
+    q = parse(dex, "Which Fire types learn Will-O-Wisp?")
+    assert q.intent == "filter" and q.move == "will-o-wisp" and q.types == ["fire"]
+
+
+def test_move_name_type_word_is_not_a_type_filter(dex):
+    q = parse(dex, "Which Pokémon learn Fire Blast?")
+    assert q.move == "fire-blast" and q.types == []
+
+
+def test_route_filter_ability_region(dex):
+    q = parse(dex, "Pokémon with Intimidate in Paldea")
+    assert q.intent == "filter" and q.ability == "intimidate" and q.region == "paldea"
+
+
+@pytest.mark.parametrize("text,cond", [
+    ("Ground types under 50 kg", ("weight_kg", "<", 50)),
+    ("Pokemon under 20 lbs", ("weight_kg", "<", 9.07)),
+    ("Which Pokémon are taller than 3 m?", ("height_m", ">", 3)),
+    ("Water types with base speed over 100", ("spe", ">", 100)),
+    ("Which Pokémon have Sp. Atk above 140?", ("spa", ">", 140)),
+    ("Pokemon with at least 130 attack", ("atk", ">=", 130)),
+])
+def test_numeric_conditions(dex, text, cond):
+    assert parse(dex, text).numeric == [cond]
+
+
+def test_at_least_is_not_a_superlative(dex):
+    q = parse(dex, "Pokemon with at least 130 attack")
+    assert q.stat == "atk" and q.descending
+
+
+def test_filter_results(dex):
+    names = {p["name"] for p in dex.filter_pokemon(ability="intimidate", region="paldea", allow_legendary=True)}
+    assert {"salamence", "gyarados", "incineroar"} <= names
+    light = dex.filter_pokemon(types=["ground"], numeric=[("weight_kg", "<", 50)])
+    assert light and all(p["weight_kg"] < 50 and "ground" in p["types"] for p in light)
+
+
+def test_ability_question_without_has_is_lookup(dex):
+    assert parse(dex, "What does Intimidate do?").intent == "lookup"
