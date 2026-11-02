@@ -35,6 +35,10 @@ class Pokedex:
         self.moves = data["moves"]
         self.types = data["types"]
         self.regions = data["regions"]
+        self.evolutions = data.get("evolutions", [])  # older datasets: rerun `ingest` or `python -m pokedex_rag.build`
+        # Evolution items as they'd be written in a question: "moon stone" -> "moon-stone".
+        self.evo_items = {norm(m[k]): m[k] for e in self.evolutions for m in e["methods"]
+                          for k in ("item", "held_item") if m.get(k)}
         self.chart = TypeChart(self.types)
         self.alias = self._build_aliases()
         self.max_alias_len = max(len(a.split()) for a in self.alias)
@@ -139,6 +143,18 @@ class Pokedex:
         moves = [m for m in self.moves.values() if m["power"] and (not type_ or m["type"] == type_)
                  and (not damage_class or m["damage_class"] == damage_class)]
         return sorted(moves, key=lambda m: (m["power"], m["accuracy"] or 100), reverse=True)[:n]
+
+    def evolution_steps(self, species):
+        """Steps into and out of a species: (evolves_from, evolves_into)."""
+        return ([e for e in self.evolutions if e["to"] == species],
+                [e for e in self.evolutions if e["from"] == species])
+
+    def evolutions_by(self, item=None, trade=False, friendship=False):
+        """Evolution steps that use a given item (used or held), trading, or friendship."""
+        def ok(m):
+            return ((not item or item in (m.get("item"), m.get("held_item")))
+                    and (not trade or m.get("trade")) and (not friendship or m.get("friendship")))
+        return [e for e in self.evolutions if any(ok(m) for m in e["methods"])]
 
     # ---------- text cards (what the LLM sees) ----------
 

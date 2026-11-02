@@ -96,17 +96,34 @@ def evo_condition(d):
     return ", ".join(bits) or "level up"
 
 
-def evolution_text(chain, names):
-    """Human-readable evolution line. Linear chains use arrows; branching ones list each step."""
+def evolution_edges(chain):
+    """Every (from_species, to_species, details) step in a chain, parents before children."""
     edges = []
 
     def walk(node):
         for child in node["evolves_to"]:
-            conds = "; or ".join(dict.fromkeys(evo_condition(d) for d in child["details"])) or "special"
-            edges.append((node["species"], child["species"], conds))
+            edges.append((node["species"], child["species"], child["details"]))
             walk(child)
 
     walk(chain)
+    return edges
+
+
+def evo_method(d):
+    """One way to evolve, as structured fields (only those that apply) plus readable text."""
+    out = {k: d[k] for k in ("min_level", "item", "held_item", "known_move", "time_of_day", "location") if d.get(k)}
+    if d.get("trigger") == "trade":
+        out["trade"] = True
+    if d.get("min_happiness"):
+        out["friendship"] = True
+    out["text"] = evo_condition(d)
+    return out
+
+
+def evolution_text(chain, names):
+    """Human-readable evolution line. Linear chains use arrows; branching ones list each step."""
+    edges = [(a, b, "; or ".join(dict.fromkeys(evo_condition(d) for d in details)) or "special")
+             for a, b, details in evolution_edges(chain)]
     if not edges:
         return "Does not evolve."
     branching = len({a for a, _, _ in edges}) < len(edges)
@@ -175,7 +192,7 @@ def build():
             for s in dex["species"]:
                 dex_regions.setdefault(s, set()).add(dex["region"])
 
-    fully_evolved, evo_text, evo_line = {}, {}, {}
+    fully_evolved, evo_text, evo_line, evolutions = {}, {}, {}, []
     for sp in species.values():
         cid = int(sp["evolution_chain"].rstrip("/").split("/")[-1]) if sp["evolution_chain"] else None
         chain = chains.get(cid)
@@ -186,6 +203,11 @@ def build():
         for m, final in members:
             fully_evolved[m] = final
         text = evolution_text(chain, species_names)
+        for a, b, details in evolution_edges(chain):
+            methods = list({m["text"]: m for m in map(evo_method, details)}.values())
+            evolutions.append({"from": a, "to": b, "from_display": species_names.get(a, pretty(a)),
+                               "to_display": species_names.get(b, pretty(b)),
+                               "methods": methods or [{"text": "special"}]})
         for m, _ in members:
             evo_text[m] = text
             evo_line[m] = [n for n, _ in members]
@@ -292,6 +314,8 @@ def build():
         "moves": out_moves,
         "types": types,
         "regions": out_regions,
+        # Each chain is reachable from every member species; keep one copy of each step.
+        "evolutions": list({(e["from"], e["to"]): e for e in evolutions}.values()),
     }
     DATASET_PATH.write_text(json.dumps(dataset))
     print(f"Built dataset: {len(out_pokemon)} Pokémon, {len(out_abilities)} abilities, "

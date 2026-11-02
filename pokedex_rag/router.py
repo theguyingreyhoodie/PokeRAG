@@ -29,6 +29,12 @@ COUNTER = re.compile(r"\b(counter|counters|countering|beat|beats|beating|against
 TEAM = re.compile(r"\b(team|teams|teammate|teammates|partner|partners|build|synergy|core|lineup|line up|party|squad|sixth|6th|fill|add to|rate my)\b")
 MY_TEAM = re.compile(r"\b(my team|my party|my lineup|i have|i'm using|i am using|i use|my squad)\b")
 MOVE_Q = re.compile(r"\bmoves?\b")
+# "vs"/"compare" always mean a comparison; "better"/"faster" only when it isn't a counter question.
+COMPARE = re.compile(r"\b(vs|versus|compare|compared|comparing|comparison|difference|differences|differ|head to head)\b")
+COMPARE_WEAK = re.compile(r"\b(better|stronger|faster|slower|bulkier|tankier|who wins|who would win)\b")
+EVOLVE = re.compile(r"\b(evolv\w*|evolution\w*|evo)\b")
+TRADE = re.compile(r"\btrad(e|ed|es|ing)\b")
+FRIENDSHIP = re.compile(r"\b(friendship|happiness|happy|affection)\b")
 
 
 @dataclass
@@ -39,12 +45,15 @@ class Query:
     region: str | None = None
     stat: str | None = None
     descending: bool = True
-    intent: str = "lookup"                           # lookup | ranking | team | counter
+    intent: str = "lookup"                           # lookup | ranking | team | counter | compare | evolution
     my_team: list = field(default_factory=list)
     opponents: list = field(default_factory=list)
     allow_legendary: bool = False
     allow_mega: bool = False
     about_moves: bool = False
+    evo_item: str | None = None                      # evolution filters: "moon-stone", trade, friendship
+    evo_trade: bool = False
+    evo_friendship: bool = False
 
 
 def parse(dex, text, history_pokemon=None):
@@ -71,7 +80,18 @@ def parse(dex, text, history_pokemon=None):
 
     is_counter = bool(COUNTER.search(low))
     is_team = bool(TEAM.search(low))
-    if is_counter and q.pokemon:
+    is_compare = 2 <= len(q.pokemon) <= 4 and not MY_TEAM.search(low) and not is_team and (
+        COMPARE.search(low) or (COMPARE_WEAK.search(low) and not is_counter))
+    if is_compare:
+        q.intent = "compare"
+    elif EVOLVE.search(low) and not is_counter and not is_team:
+        q.intent = "evolution"
+        q.evo_item = next((item for key, item in dex.evo_items.items() if re.search(rf"\b{key}\b", low)), None)
+        q.evo_trade = bool(TRADE.search(low))
+        q.evo_friendship = bool(FRIENDSHIP.search(low))
+        if not (q.pokemon or q.evo_item or q.evo_trade or q.evo_friendship):
+            q.intent = "lookup"   # a general evolution question: let search handle it
+    elif is_counter and q.pokemon:
         q.intent = "counter"
         my = MY_TEAM.search(low)
         kw = COUNTER.search(low)
@@ -101,4 +121,6 @@ def parse(dex, text, history_pokemon=None):
     # Follow-ups like "what about its weaknesses?" inherit the previous turn's Pokémon.
     if not q.pokemon and history_pokemon and q.intent == "lookup" and not q.types and not q.region:
         q.pokemon = list(history_pokemon)
+        if EVOLVE.search(low):
+            q.intent = "evolution"   # "what does it evolve into?"
     return q

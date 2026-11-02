@@ -15,6 +15,8 @@ It runs entirely on your own machine for free by default (a local LLM through Ol
 | *"How do I counter Garchomp, Dragonite and Tyranitar?"* | Type-chart engine scores every Pokémon against each opponent |
 | *"My team is Charizard, Gyarados and Pikachu. How do I beat Gengar?"* | Splits *your* team from the opponent, picks which of your members to send in, and flags gaps |
 | *"Build me a Paldea team around Garchomp"* | Greedy team builder that patches shared weaknesses and coverage gaps, restricted to a region |
+| *"Garchomp vs Salamence"*, *"Is Dragapult faster than Garchomp?"* | Side-by-side stats with the leader in each, weaknesses, and a computed one-on-one matchup verdict |
+| *"Which Pokémon evolve with a Moon Stone?"*, *"What level does Gible evolve?"* | Exact lookup over structured evolution steps (level, item, held item, trade, friendship, time, location) |
 | *"Tell me about the Johto region"* | Region cards: games, regional Pokédexes, starters, legendaries, regional forms |
 
 The web UI also has a **Team builder** (weakness heatmap, findings, suggested additions) and a **Counter a team** tool that work without the LLM at all.
@@ -29,8 +31,8 @@ The web UI also has a **Team builder** (weakness heatmap, findings, suggested ad
 ```mermaid
 flowchart LR
     Q[Question] --> R[Router<br/>names, types, region,<br/>stat, intent]
-    R -->|counter / team| S[Strategy engine<br/>type chart + abilities<br/>+ stats]
-    R -->|ranking| D[Exact DB query]
+    R -->|counter / team / compare| S[Strategy engine<br/>type chart + abilities<br/>+ stats]
+    R -->|ranking / evolution| D[Exact DB query]
     R -->|lookup| H[Hybrid search<br/>BM25 + vectors → RRF<br/>→ cross-encoder rerank]
     S --> C[Context builder<br/>analysis + Pokémon cards]
     D --> C
@@ -39,7 +41,7 @@ flowchart LR
     L --> A[Answer with citations]
 ```
 
-**1. Query routing (`router.py`).** Fast rule-based parsing finds Pokémon names (including "Alolan Ninetales", "Mega Charizard X", "Wash Rotom", typos in the team builder), types, regions or generations, stat words ("fastest", "bulkiest") and the intent. Rules are used instead of an extra LLM call so routing is instant, free and behaves the same with a 3B local model as with a large hosted one.
+**1. Query routing (`router.py`).** Fast rule-based parsing finds Pokémon names (including "Alolan Ninetales", "Mega Charizard X", "Wash Rotom", typos in the team builder), types, regions or generations, stat words ("fastest", "bulkiest"), evolution items ("Moon Stone", "King's Rock") and the intent (lookup, ranking, team, counter, compare or evolution). Rules are used instead of an extra LLM call so routing is instant, free and behaves the same with a 3B local model as with a large hosted one.
 
 **2. Don't let the LLM do math.** Team analysis and counters are computed in plain Python (`strategy.py`): the full 18-type chart, STAB, the strongest sensible move of each type a Pokémon can learn, speed and bulk, and abilities that grant immunities (Levitate, Flash Fire, Water Absorb, ...) when the Pokémon is guaranteed to have them. The LLM receives these results as an `ANALYSIS` block and explains them. Small models are bad at multiplying type matchups; this keeps recommendations correct and reproducible.
 
@@ -72,7 +74,7 @@ Takeaways:
 
 Caveats: both eval sets are small and hand-written, so treat these numbers as a sanity check rather than a benchmark. The end-to-end check looks for expected keywords in the answer; it doesn't grade full correctness.
 
-`pytest` runs 37 unit tests for the type chart, name matching, routing and strategy engine.
+`pytest` runs 48 unit tests for the type chart, name matching, routing, strategy engine, comparisons and evolutions.
 
 ## Quick start
 
@@ -115,7 +117,7 @@ pokedex_rag/
   build.py      Clean them into one dataset: forms, evolutions, regions, best moves, matchups
   store.py      In-memory Pokédex: name matching, filters, rankings, text cards for the LLM
   typechart.py  Type effectiveness and ability-based immunities
-  strategy.py   Team analysis, counters, team building
+  strategy.py   Team analysis, counters, team building, comparisons
   router.py     Rule-based query understanding
   index.py      Chunking and the Chroma vector index
   retrieve.py   BM25, hybrid search, reranking, context assembly

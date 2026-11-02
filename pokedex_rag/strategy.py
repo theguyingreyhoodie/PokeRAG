@@ -266,3 +266,43 @@ def counters(dex, opponents, my_team=None, n=5, **pool_filters):
         result["my_team_plan"] = plan
         result["no_safe_answer"] = uncovered
     return result
+
+
+STAT_ORDER = ["hp", "atk", "def", "spa", "spd", "spe"]
+
+
+def compare(dex, names):
+    """Side-by-side comparison of 2-4 Pokémon: stats, typing, and every one-on-one matchup."""
+    mons = [dex.pokemon[n] for n in names]
+    stats = {}
+    for k in STAT_ORDER + ["bst"]:
+        vals = {p["display"]: (p["bst"] if k == "bst" else p["stats"][k]) for p in mons}
+        top = max(vals.values())
+        stats[k] = {"values": vals, "leaders": [d for d, v in vals.items() if v == top] if len(set(vals.values())) > 1 else []}
+
+    matchups = []
+    for i, a in enumerate(mons):
+        for b in mons[i + 1:]:
+            ab, ba = matchup(dex, a, b), matchup(dex, b, a)
+            # A >15% gap in matchup scores counts as an edge; anything closer is a toss-up.
+            if ab["score"] > ba["score"] * 1.15:
+                favored = a["display"]
+            elif ba["score"] > ab["score"] * 1.15:
+                favored = b["display"]
+            else:
+                favored = None
+            matchups.append({"a": a["display"], "b": b["display"], "favored": favored,
+                             "a_vs_b": ab["reason"], "b_vs_a": ba["reason"],
+                             "a_score": ab["score"], "b_score": ba["score"]})
+
+    def weak(p):
+        d = p["defense"]
+        return d.get("4x weak", []) + d.get("2x weak", [])
+
+    return {
+        "pokemon": [dex.brief(p) for p in mons],
+        "types": {p["display"]: p["types"] for p in mons},
+        "weaknesses": {p["display"]: weak(p) for p in mons},
+        "stats": stats,
+        "matchups": matchups,
+    }

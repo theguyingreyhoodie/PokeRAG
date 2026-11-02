@@ -178,6 +178,30 @@ def fmt_counters(c):
     return "\n".join(lines)
 
 
+def fmt_compare(c):
+    names = list(c["types"])
+    lines = ["Typing: " + "; ".join(f"{n} {'/'.join(t.title() for t in ts)}" for n, ts in c["types"].items())]
+    lines.append("Base stats (leader marked *):")
+    for k, row in c["stats"].items():
+        label = "Total" if k == "bst" else STAT_LABELS[k]
+        lines.append(f"  {label}: " + ", ".join(f"{n} {v}{'*' if n in row['leaders'] else ''}"
+                                               for n, v in row["values"].items()))
+    lines.append("Weaknesses: " + "; ".join(
+        f"{n}: {', '.join(t.title() for t in c['weaknesses'][n]) or 'none'}" for n in names))
+    lines.append("One-on-one type matchups (type chart, STAB, best learnable moves, speed and bulk; not a full battle sim):")
+    for m in c["matchups"]:
+        verdict = f"{m['favored']} has the edge" if m["favored"] else "roughly even"
+        lines.append(f"  {m['a']} vs {m['b']}: {verdict}.")
+        lines.append(f"    {m['a']} attacking: {m['a_vs_b']}")
+        lines.append(f"    {m['b']} attacking: {m['b_vs_a']}")
+    return "\n".join(lines)
+
+
+def fmt_evo_steps(steps):
+    return "\n".join(f"- {e['from_display']} → {e['to_display']}: " + " OR ".join(m["text"] for m in e["methods"])
+                     for e in steps)
+
+
 def build_context(question, history_pokemon=None, k=TOP_K):
     dex = get_pokedex()
     q = parse(dex, question, history_pokemon)
@@ -221,6 +245,38 @@ def build_context(question, history_pokemon=None, k=TOP_K):
         ctx.blocks.append(("ANALYSIS (computed by the type-chart engine)", text))
         for n in q.my_team:
             ctx.add_pokemon(n)
+
+    elif q.intent == "compare":
+        c = strategy.compare(dex, q.pokemon)
+        ctx.analysis, ctx.analysis_kind = c, "compare"
+        ctx.blocks.append(("ANALYSIS (computed comparison)", fmt_compare(c)))
+
+    elif q.intent == "evolution":
+        if q.evo_item or q.evo_trade or q.evo_friendship:
+            steps = dex.evolutions_by(item=q.evo_item, trade=q.evo_trade, friendship=q.evo_friendship)
+            named = {dex.pokemon[n]["species"] for n in q.pokemon}
+            if named and any(e["from"] in named for e in steps):
+                steps = [e for e in steps if e["from"] in named]   # "What does Eevee evolve into with a Water Stone?"
+            what = " and ".join(x for x in [q.evo_item and f"the {pretty(q.evo_item)}",
+                                            q.evo_trade and "trading", q.evo_friendship and "friendship"] if x)
+            text = f"{len(steps)} evolutions involve {what}:\n" + (fmt_evo_steps(steps) or "(none)")
+            ctx.blocks.append(("EVOLUTIONS (exact, from the database)", text))
+            for e in steps[:4]:
+                if (target := dex.pokemon_by_species(e["to"])):
+                    ctx.add_pokemon(target["name"])
+        else:
+            parts = []
+            for n in q.pokemon[:3]:
+                p = dex.pokemon[n]
+                into_it, out_of = dex.evolution_steps(p["species"])
+                parts.append(f"{p['display']}: evolves from "
+                             + (" / ".join(f"{e['from_display']} ({' or '.join(m['text'] for m in e['methods'])})"
+                                           for e in into_it) or "nothing (it is a base form)")
+                             + "; evolves into "
+                             + (" / ".join(f"{e['to_display']} ({' or '.join(m['text'] for m in e['methods'])})"
+                                           for e in out_of) or "nothing (final stage)")
+                             + f". Full line: {p['evolution']}")
+            ctx.blocks.append(("EVOLUTIONS (exact, from the database)", "\n".join(parts)))
 
     elif q.intent == "ranking":
         if q.about_moves:

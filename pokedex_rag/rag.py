@@ -9,6 +9,7 @@ SYSTEM_PROMPT = """You are PokéRAG, a Pokémon expert assistant for stats, regi
 Rules:
 - Answer ONLY from the CONTEXT provided with each question. If the context does not contain the answer, say you don't know rather than guessing.
 - Sections marked ANALYSIS or RANKING were computed exactly by a type-chart engine or database query. Trust their numbers, rankings and recommendations; your job is to explain them clearly, not to recompute them.
+- For a comparison, use the stat table and matchup verdicts as given; say which Pokémon leads in what, and note that matchups are type-based, not a full battle simulation.
 - For a RANKING, entry #1 is the answer to "which is the fastest/strongest/...". Keep the ranking's order; note ties.
 - When recommending counters or teammates, give the reason for each pick (type advantage, resistances, speed).
 - Cite sources in square brackets after the facts they support, using the bracketed names in the context, e.g. [Garchomp] or [Intimidate (ability)].
@@ -30,6 +31,8 @@ def compact_analysis(ctx):
     a = ctx.analysis
     if not a:
         return None
+    if ctx.analysis_kind == "compare":
+        return a
     if ctx.analysis_kind == "counters":
         return {k: a[k] for k in ("per_opponent", "team_wide", "best_attacking_types", "my_team_plan", "no_safe_answer") if k in a}
     an = a["analysis"]

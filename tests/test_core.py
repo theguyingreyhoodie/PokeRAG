@@ -131,3 +131,51 @@ def test_levitate_makes_rotom_wash_ground_immune(dex):
 def test_optional_ability_is_not_assumed(dex):
     # Bronzong (Steel/Psychic) can have Levitate or Heatproof, so Ground keeps its 2x on Steel.
     assert dex.chart.eff_vs("ground", dex.pokemon["bronzong"]) == 2
+
+
+# ---------- comparisons ----------
+
+@pytest.mark.parametrize("text", ["Garchomp vs Salamence", "Which is better, Lucario or Gallade?",
+                                  "Is Dragapult faster than Garchomp?", "Compare Charizard, Blastoise and Venusaur"])
+def test_route_compare(dex, text):
+    assert parse(dex, text).intent == "compare"
+
+
+def test_counter_question_is_not_compare(dex):
+    assert parse(dex, "How do I beat Garchomp and Salamence?").intent == "counter"
+
+
+def test_compare_stats_and_matchup(dex):
+    c = strategy.compare(dex, ["dragapult", "garchomp"])
+    assert c["stats"]["spe"]["leaders"] == ["Dragapult"]
+    assert c["stats"]["bst"]["leaders"] == []          # both 600: a tie has no leader
+    assert len(c["matchups"]) == 1
+
+
+# ---------- evolutions ----------
+
+def test_route_evolution_item(dex):
+    q = parse(dex, "Which Pokémon evolve with a Moon Stone?")
+    assert q.intent == "evolution" and q.evo_item == "moon-stone"
+
+
+def test_moon_stone_evolutions(dex):
+    targets = {e["to"] for e in dex.evolutions_by(item="moon-stone")}
+    assert {"clefable", "wigglytuff", "nidoking", "nidoqueen"} <= targets
+
+
+def test_trade_evolutions_include_held_items(dex):
+    steps = {e["to"]: e for e in dex.evolutions_by(trade=True)}
+    assert "gengar" in steps and "scizor" in steps
+    assert any(m.get("held_item") == "metal-coat" for m in steps["scizor"]["methods"])
+
+
+def test_evolution_steps_in_and_out(dex):
+    into, out = dex.evolution_steps("gabite")
+    assert [e["from"] for e in into] == ["gible"] and into[0]["methods"][0]["min_level"] == 24
+    assert [e["to"] for e in out] == ["garchomp"]
+
+
+def test_evolution_follow_up_uses_history(dex):
+    q = parse(dex, "what does it evolve into?", history_pokemon=["eevee"])
+    assert q.intent == "evolution" and q.pokemon == ["eevee"]
